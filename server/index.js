@@ -7,6 +7,7 @@ import { router as ticketsRouter } from './routes/tickets.js';
 import { router as callsRouter } from './routes/calls.js';
 import { router as chatsRouter } from './routes/chats.js';
 import { router as statsRouter } from './routes/stats.js';
+import { router as employeesRouter } from './routes/employees.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -19,6 +20,7 @@ app.use('/api/tickets', ticketsRouter);
 app.use('/api/calls', callsRouter);
 app.use('/api/chats', chatsRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/employees', employeesRouter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -44,31 +44,23 @@ if (employeeCount === 0) {
 
   const ticketId = number => db.prepare('SELECT id FROM tickets WHERE number = ?').get(number).id;
 
-  const insertChat = db.prepare('INSERT INTO chats (client_name, status, ticket_id, note) VALUES (?, ?, ?, ?)');
-  const insertMessage = db.prepare('INSERT INTO chat_messages (chat_id, sender, text, created_at, read) VALUES (?, ?, ?, ?, ?)');
+  const insertChat = db.prepare(`
+    INSERT INTO chats (client_name, gkk_unk, topic, essence, agent_id, status, created_at, closed_at, transfer_correct, malfunction, requires_ticket, ticket_id, note)
+    VALUES (@client_name, @gkk_unk, @topic, @essence, @agent_id, @status, @created_at, @closed_at, @transfer_correct, @malfunction, @requires_ticket, @ticket_id, @note)
+  `);
   const insertTag = db.prepare('INSERT INTO chat_tags (chat_id, tag) VALUES (?, ?)');
 
   const chatSeeds = [
-    { client_name: 'Мария Соколова', status: 'active', ticket: '85374', note: '', tags: ['Приоритетный клиент', 'Возврат'],
-      messages: [
-        ['client', 'Добрый день! Уточните, пожалуйста, статус по заказу №2291.', 0],
-        ['agent', 'Добрый день! Проверяю, минуту.', 0],
-        ['agent', 'Возврат оформлен, средства поступят в течение 3 рабочих дней.', 0],
-        ['client', 'Отправила документы по заказу', 1],
-      ] },
-    { client_name: 'ООО «Вектор»', status: 'active', ticket: null, note: '', tags: [],
-      messages: [['client', 'Спасибо, ожидаю обновление', 0]] },
-    { client_name: 'Артём Ким', status: 'active', ticket: '85198', note: '', tags: [],
-      messages: [['client', 'Клиент подтвердил возврат', 1]] },
-    { client_name: 'Техподдержка L2', status: 'closed', ticket: '85212', note: '', tags: [],
-      messages: [['agent', 'Передал тикет №85212 дальше', 0]] },
-    { client_name: 'Кузнецов Д.И.', status: 'closed', ticket: '85033', note: '', tags: [],
-      messages: [['client', 'Спор закрыт, спасибо за помощь', 0]] },
+    { client_name: 'Мария Соколова', gkk_unk: 'УНК-2291', topic: 'Возврат средств', essence: 'Уточняет статус возврата по заказу №2291, отправила подтверждающие документы.', agent_id: ids['Мария Соколова'], status: 'active', created_at: hoursAgo(0.3), closed_at: null, transfer_correct: 1, malfunction: 0, requires_ticket: 1, ticket: '85374', note: '', tags: ['Приоритетный клиент', 'Возврат'] },
+    { client_name: 'ООО «Вектор»', gkk_unk: null, topic: 'Изменение условий договора', essence: 'Ожидает обновление по тарифам обслуживания.', agent_id: ids['Артём Ким'], status: 'active', created_at: hoursAgo(0.6), closed_at: null, transfer_correct: 1, malfunction: 0, requires_ticket: 0, ticket: null, note: '', tags: [] },
+    { client_name: 'Артём Ким', gkk_unk: 'УНК-3310', topic: 'Претензия по качеству', essence: 'Клиент подтвердил возврат по своей претензии.', agent_id: ids['Иван Петров'], status: 'active', created_at: hoursAgo(20), closed_at: null, transfer_correct: 1, malfunction: 0, requires_ticket: 1, ticket: '85198', note: '', tags: [] },
+    { client_name: 'Техподдержка L2', gkk_unk: null, topic: 'Технический сбой', essence: 'Передан тикет №85212 дальше по эскалации.', agent_id: ids['Ольга Новак'], status: 'closed', created_at: hoursAgo(30), closed_at: hoursAgo(28), transfer_correct: 0, malfunction: 1, requires_ticket: 1, ticket: '85212', note: '', tags: [] },
+    { client_name: 'Кузнецов Д.И.', gkk_unk: 'УНК-1180', topic: 'Технический сбой', essence: 'Спор по счёту закрыт, клиент поблагодарил за помощь.', agent_id: ids['Иван Петров'], status: 'closed', created_at: hoursAgo(50), closed_at: hoursAgo(49), transfer_correct: 1, malfunction: 0, requires_ticket: 1, ticket: '85033', note: '', tags: [] },
   ];
   for (const c of chatSeeds) {
-    const { lastInsertRowid: chatId } = insertChat.run(c.client_name, c.status, c.ticket ? ticketId(c.ticket) : null, c.note);
-    for (const [sender, text, unread] of c.messages) insertMessage.run(chatId, sender, text, new Date().toISOString(), unread ? 0 : 1);
-    for (const tag of c.tags) insertTag.run(chatId, tag);
+    const { tags, ticket, ...row } = c;
+    const { lastInsertRowid: chatId } = insertChat.run({ ...row, ticket_id: ticket ? ticketId(ticket) : null });
+    for (const tag of tags) insertTag.run(chatId, tag);
   }
 
   const insertCall = db.prepare(`

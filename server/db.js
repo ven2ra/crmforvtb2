@@ -39,6 +39,10 @@ CREATE TABLE IF NOT EXISTS tickets (
 CREATE TABLE IF NOT EXISTS calls (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   client_name TEXT NOT NULL,
+  phone TEXT,
+  agreement_number TEXT,
+  topic TEXT,
+  essence TEXT,
   agent_id INTEGER REFERENCES employees(id),
   status TEXT NOT NULL DEFAULT 'ongoing' CHECK(status IN ('ongoing','starting','break','ended')),
   started_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -48,6 +52,10 @@ CREATE TABLE IF NOT EXISTS calls (
   result TEXT,
   comment TEXT,
   recorded INTEGER NOT NULL DEFAULT 1,
+  is_client INTEGER,
+  transfer_correct INTEGER,
+  malfunction INTEGER,
+  requires_ticket INTEGER,
   ticket_id INTEGER REFERENCES tickets(id)
 );
 
@@ -60,18 +68,18 @@ CREATE TABLE IF NOT EXISTS call_team (
 CREATE TABLE IF NOT EXISTS chats (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   client_name TEXT NOT NULL,
+  gkk_unk TEXT,
+  topic TEXT,
+  essence TEXT,
+  agent_id INTEGER REFERENCES employees(id),
   status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','closed')),
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  closed_at TEXT,
+  transfer_correct INTEGER,
+  malfunction INTEGER,
+  requires_ticket INTEGER,
   ticket_id INTEGER REFERENCES tickets(id),
   note TEXT NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  chat_id INTEGER NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
-  sender TEXT NOT NULL CHECK(sender IN ('agent','client')),
-  text TEXT NOT NULL,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  read INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS chat_tags (
@@ -80,5 +88,37 @@ CREATE TABLE IF NOT EXISTS chat_tags (
   tag TEXT NOT NULL
 );
 `);
+
+function addColumnsIfMissing(table, columns) {
+  const existing = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name));
+  for (const [column, type] of Object.entries(columns)) {
+    if (!existing.has(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
+}
+
+addColumnsIfMissing('calls', {
+  phone: 'TEXT',
+  agreement_number: 'TEXT',
+  topic: 'TEXT',
+  essence: 'TEXT',
+  is_client: 'INTEGER',
+  transfer_correct: 'INTEGER',
+  malfunction: 'INTEGER',
+  requires_ticket: 'INTEGER',
+});
+
+addColumnsIfMissing('chats', {
+  gkk_unk: 'TEXT',
+  topic: 'TEXT',
+  essence: 'TEXT',
+  agent_id: 'INTEGER',
+  created_at: 'TEXT',
+  closed_at: 'TEXT',
+  transfer_correct: 'INTEGER',
+  malfunction: 'INTEGER',
+  requires_ticket: 'INTEGER',
+});
+
+db.exec("UPDATE chats SET created_at = datetime('now') WHERE created_at IS NULL");
 
 export default db;

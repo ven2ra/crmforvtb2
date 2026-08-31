@@ -32,7 +32,7 @@ router.get('/', (req, res) => {
     SELECT COUNT(*) AS n FROM calls WHERE date(started_at) = ?
   `);
   const chatsTrend = last8DaysCounts(`
-    SELECT COUNT(*) AS n FROM (SELECT DISTINCT c.id FROM chats c JOIN chat_messages m ON m.chat_id = c.id WHERE date(m.created_at) = ?)
+    SELECT COUNT(*) AS n FROM chats WHERE date(created_at) = ?
   `);
 
   const deptRows = db.prepare(`

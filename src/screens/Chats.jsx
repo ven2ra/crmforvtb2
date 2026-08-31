@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Avatar } from '../components/core/Avatar.jsx';
 import { Input } from '../components/forms/Input.jsx';
-import { Icon } from '../components/core/Icon.jsx';
-import { IconButton } from '../components/core/IconButton.jsx';
 import { Badge } from '../components/core/Badge.jsx';
 import { Tag } from '../components/feedback/Tag.jsx';
 import { Tabs } from '../components/navigation/Tabs.jsx';
 import { Button } from '../components/core/Button.jsx';
+import { StartChatDialog } from '../components/chat/StartChatDialog.jsx';
+import { NewTicketDialog } from '../components/ticket/NewTicketDialog.jsx';
 import { api } from '../lib/api.js';
 
 export function Chats() {
@@ -14,10 +14,11 @@ export function Chats() {
   const [chats, setChats] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [chat, setChat] = useState(null);
-  const [notesOpen, setNotesOpen] = useState(true);
-  const [draft, setDraft] = useState('');
   const [newTag, setNewTag] = useState('');
   const [error, setError] = useState(null);
+  const [startOpen, setStartOpen] = useState(false);
+  const [ticketPrefill, setTicketPrefill] = useState(null);
+  const [closing, setClosing] = useState(false);
 
   const visible = chats.filter(c => c.status === filter);
 
@@ -40,20 +41,6 @@ export function Chats() {
     api.getChat(activeId).then(setChat).catch(err => setError(err.message));
   }, [activeId]);
 
-  const send = async () => {
-    if (!draft.trim() || !chat) return;
-    const text = draft.trim();
-    setDraft('');
-    try {
-      await api.sendChatMessage(chat.id, text);
-      const fresh = await api.getChat(chat.id);
-      setChat(fresh);
-      loadChats();
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
   const addTag = async () => {
     if (!newTag.trim() || !chat) return;
     const tag = newTag.trim();
@@ -75,10 +62,24 @@ export function Chats() {
     }
   };
 
+  const closeChat = async () => {
+    setClosing(true);
+    try {
+      await api.updateChat(chat.id, { status: 'Закрытые' });
+      loadChats();
+      setChat(await api.getChat(chat.id));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setClosing(false);
+    }
+  };
+
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: notesOpen ? '320px 1fr 260px' : '320px 1fr', height: '100%' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', height: '100%' }}>
       <div style={{ borderRight: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px 20px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Button variant="primary" onClick={() => setStartOpen(true)} style={{ width: '100%' }}>+ Начать чат</Button>
           <Input icon="search" placeholder="Поиск чатов" />
           <Tabs items={['Активные', 'Закрытые']} active={filter} onChange={setFilter} />
         </div>
@@ -89,73 +90,100 @@ export function Chats() {
               <Avatar name={c.name} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)', fontWeight: 600 }}>{c.name}</span><span style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)' }}>{c.time}</span></div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ font: 'var(--text-caption)', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.last}</span>{c.unread > 0 && <Badge tone="accent">{c.unread}</Badge>}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ font: 'var(--text-caption)', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.topic || '—'}</span>
+                  {c.ticket && <Badge tone="accent">№{c.ticket}</Badge>}
+                </div>
               </div>
             </div>
           ))}
         </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: 32, overflowY: 'auto' }}>
         {!chat ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>Выберите чат</div>
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>Выберите чат</div>
         ) : (
-          <React.Fragment>
-            <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <Avatar name={chat.name} status="online" ring />
+          <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <Avatar name={chat.name} size={44} />
               <div style={{ flex: 1 }}>
-                <div style={{ font: 'var(--text-h3)', fontWeight: 700, color: 'var(--text-primary)' }}>{chat.name}</div>
-                {chat.ticket && <Badge tone="accent" dot>Обращение №{chat.ticket}</Badge>}
+                <div style={{ font: 'var(--text-h2)', fontWeight: 700, color: 'var(--text-primary)' }}>{chat.name}</div>
+                <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginTop: 2 }}>{chat.date} · {chat.time}</div>
               </div>
-              <IconButton icon={<Icon name="filter" />} active={notesOpen} onClick={() => setNotesOpen(o => !o)} />
+              <Badge tone={chat.status === 'Активные' ? 'accent' : 'success'} dot>{chat.status === 'Активные' ? 'Активен' : 'Закрыт'}</Badge>
             </div>
-            <div style={{ flex: 1, padding: 24, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-              {chat.messages.map(m => (
-                <div key={m.id} style={{ alignSelf: m.me ? 'flex-end' : 'flex-start', maxWidth: '60%', background: m.me ? 'var(--accent)' : 'var(--bg-surface-2)', color: m.me ? '#fff' : 'var(--text-primary)', borderRadius: 'var(--radius-lg)', padding: '10px 14px', font: 'var(--text-body-sm)' }}>
-                  {m.text}
-                  <div style={{ font: 'var(--text-caption)', opacity: .7, marginTop: 4, textAlign: 'right' }}>{m.time}</div>
+
+            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)', padding: 20, boxShadow: 'var(--shadow-card)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>ГКК (УНК)</div>
+                  <div style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>{chat.gkkUnk || '—'}</div>
                 </div>
-              ))}
+                <div>
+                  <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>Тематика</div>
+                  <div style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>{chat.topic || '—'}</div>
+                </div>
+              </div>
+              {chat.essence && (
+                <div>
+                  <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>Суть вопроса</div>
+                  <div style={{ font: 'var(--text-body-sm)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{chat.essence}</div>
+                </div>
+              )}
+              {(chat.malfunction || chat.transferCorrect === false) && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {chat.malfunction && <Badge tone="danger">Сбой</Badge>}
+                  {chat.transferCorrect === false && <Badge tone="danger">Некорр. перевод</Badge>}
+                </div>
+              )}
             </div>
-            <div style={{ padding: 16, borderTop: '1px solid var(--border-subtle)', display: 'flex', gap: 10, alignItems: 'center' }}>
-              <Input
-                placeholder={filter === 'Закрытые' ? 'Чат закрыт' : 'Написать сообщение...'}
-                style={{ flex: 1 }}
-                value={draft}
-                disabled={filter === 'Закрытые'}
-                onChange={e => setDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') send(); }}
+
+            <div>
+              <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Привязка</div>
+              {chat.ticket ? <Badge tone="accent" dot>Обращение №{chat.ticket}</Badge> : <span style={{ font: 'var(--text-body-sm)', color: 'var(--text-tertiary)' }}>Не привязан к обращению</span>}
+            </div>
+
+            <div>
+              <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Теги оператора</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {chat.tags.map(t => (<Tag key={t.id} onRemove={() => removeTag(t.id)}>{t.tag}</Tag>))}
+              </div>
+              <Input placeholder="Добавить тег…" value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addTag(); }} style={{ maxWidth: 300 }} />
+            </div>
+
+            <div>
+              <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Внутренняя заметка</div>
+              <textarea
+                placeholder="Видна только операторам..."
+                defaultValue={chat.note}
+                key={chat.id}
+                onBlur={e => api.saveChatNote(chat.id, e.target.value).catch(err => setError(err.message))}
+                style={{ width: '100%', minHeight: 90, background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 10, color: 'var(--text-primary)', font: 'var(--text-body-sm)', resize: 'vertical' }}
               />
-              <IconButton icon={<Icon name="arrowUpRight" />} active disabled={filter === 'Закрытые'} onClick={send} />
             </div>
-          </React.Fragment>
+
+            {chat.status === 'Активные' && (
+              <div>
+                <Button variant="secondary" onClick={closeChat} disabled={closing}>{closing ? 'Закрытие…' : 'Завершить чат'}</Button>
+              </div>
+            )}
+          </div>
         )}
       </div>
-      {notesOpen && chat && (
-        <div style={{ borderLeft: '1px solid var(--border-subtle)', padding: 20, display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
-          <div>
-            <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Привязка</div>
-            {chat.ticket ? <Badge tone="accent" dot>Обращение №{chat.ticket}</Badge> : <Button variant="secondary" size="sm">Привязать к обращению</Button>}
-          </div>
-          <div>
-            <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Теги оператора</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-              {chat.tags.map(t => (<Tag key={t.id} onRemove={() => removeTag(t.id)}>{t.tag}</Tag>))}
-            </div>
-            <Input placeholder="Добавить тег…" value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addTag(); }} />
-          </div>
-          <div>
-            <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Внутренняя заметка</div>
-            <textarea
-              placeholder="Видна только операторам..."
-              defaultValue={chat.note}
-              key={chat.id}
-              onBlur={e => api.saveChatNote(chat.id, e.target.value).catch(err => setError(err.message))}
-              style={{ width: '100%', minHeight: 100, background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 10, color: 'var(--text-primary)', font: 'var(--text-body-sm)', resize: 'vertical' }}
-            />
-          </div>
-        </div>
-      )}
       {error && <div style={{ position: 'fixed', bottom: 16, right: 16, background: 'var(--danger-soft)', color: 'var(--danger)', padding: '10px 16px', borderRadius: 'var(--radius-md)', font: 'var(--text-body-sm)' }} onClick={() => setError(null)}>{error}</div>}
+      <StartChatDialog
+        open={startOpen}
+        onClose={() => setStartOpen(false)}
+        onStarted={(chatId) => { setStartOpen(false); setFilter('Активные'); loadChats(); setActiveId(chatId); }}
+        onNeedsTicket={(prefill) => { setStartOpen(false); setTicketPrefill(prefill); }}
+      />
+      <NewTicketDialog
+        open={!!ticketPrefill}
+        initial={ticketPrefill}
+        source={ticketPrefill ? { chatId: ticketPrefill.chatId } : undefined}
+        onClose={() => setTicketPrefill(null)}
+        onCreated={() => { setTicketPrefill(null); setFilter('Активные'); loadChats(); if (ticketPrefill) setActiveId(ticketPrefill.chatId); }}
+      />
     </div>
   );
 }

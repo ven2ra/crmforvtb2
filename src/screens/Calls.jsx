@@ -8,6 +8,8 @@ import { Button } from '../components/core/Button.jsx';
 import { Dialog } from '../components/overlay/Dialog.jsx';
 import { Select } from '../components/forms/Select.jsx';
 import { Input } from '../components/forms/Input.jsx';
+import { StartCallDialog } from '../components/call/StartCallDialog.jsx';
+import { NewTicketDialog } from '../components/ticket/NewTicketDialog.jsx';
 import { api } from '../lib/api.js';
 
 const RESULT_TONE = { Решено: 'success', 'Не решено': 'danger', Перенос: 'warning' };
@@ -24,6 +26,8 @@ export function Calls() {
   const [wrapComment, setWrapComment] = useState('');
   const [createTicket, setCreateTicket] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [startOpen, setStartOpen] = useState(false);
+  const [ticketPrefill, setTicketPrefill] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -61,7 +65,10 @@ export function Calls() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ font: 'var(--text-display)', fontWeight: 800, color: 'var(--text-primary)' }}>Звонки</div>
-          <Tabs items={['Текущие', 'История']} active={view} onChange={setView} />
+          <div style={{ display: 'flex', gap: 10 }}>
+            <Tabs items={['Текущие', 'История']} active={view} onChange={setView} />
+            <Button variant="primary" onClick={() => setStartOpen(true)}>+ Начать звонок</Button>
+          </div>
         </div>
         {error && <div style={{ color: 'var(--danger)', font: 'var(--text-body-sm)' }}>{error}</div>}
         {loading && <div style={{ color: 'var(--text-tertiary)', font: 'var(--text-body-sm)' }}>Загрузка…</div>}
@@ -98,11 +105,19 @@ export function Calls() {
             {history.map(h => (
               <div key={h.id} className="row-hover" style={{ display: 'grid', gridTemplateColumns: '90px 1.4fr 1fr 1.2fr 90px 110px 90px', gap: 12, padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: h.rec ? 'var(--accent-hover)' : 'var(--text-tertiary)' }}><Icon name="video" size={14} />{h.rec ? 'есть' : 'нет'}</span>
-                <span>{h.name}</span>
-                <span style={{ color: 'var(--text-secondary)' }}>{h.agent}</span>
+                <div>
+                  <div>{h.name}</div>
+                  {(h.malfunction || h.transferCorrect === false) && (
+                    <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                      {h.malfunction && <Badge tone="danger">Сбой</Badge>}
+                      {h.transferCorrect === false && <Badge tone="danger">Некорр. перевод</Badge>}
+                    </div>
+                  )}
+                </div>
+                <span style={{ color: 'var(--text-secondary)' }}>{h.agent || '—'}</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>{h.date}</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>{h.duration}</span>
-                <Badge tone={RESULT_TONE[h.result]} dot>{h.result}</Badge>
+                {h.result ? <Badge tone={RESULT_TONE[h.result]} dot>{h.result}</Badge> : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
                 {h.ticket ? <Badge tone="accent">№{h.ticket}</Badge> : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
               </div>
             ))}
@@ -146,6 +161,19 @@ export function Calls() {
           </div>
         </div>
       </Dialog>
+      <StartCallDialog
+        open={startOpen}
+        onClose={() => setStartOpen(false)}
+        onLogged={() => { setStartOpen(false); load(); }}
+        onNeedsTicket={(prefill) => { setStartOpen(false); setTicketPrefill(prefill); }}
+      />
+      <NewTicketDialog
+        open={!!ticketPrefill}
+        initial={ticketPrefill}
+        source={ticketPrefill ? { callId: ticketPrefill.callId } : undefined}
+        onClose={() => setTicketPrefill(null)}
+        onCreated={() => { setTicketPrefill(null); load(); }}
+      />
     </div>
   );
 }
