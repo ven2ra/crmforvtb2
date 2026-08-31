@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Icon } from '../components/core/Icon.jsx';
 import { Avatar, AvatarStack } from '../components/core/Avatar.jsx';
 import { Badge } from '../components/core/Badge.jsx';
@@ -8,45 +8,69 @@ import { Button } from '../components/core/Button.jsx';
 import { Dialog } from '../components/overlay/Dialog.jsx';
 import { Select } from '../components/forms/Select.jsx';
 import { Input } from '../components/forms/Input.jsx';
+import { api } from '../lib/api.js';
 
-const ONGOING = [
-  { name: 'Софья Хайес', duration: '04:38', incoming: 24, pending: 0, team: ['Иван Петров', 'Артём Ким'], id: '35374' },
-  { name: 'Оуэн Дарнелл', duration: '3ч 10м', incoming: 10, pending: 4, team: ['Мария Соколова'], id: '98745' },
-  { name: 'Эмма Ларкин', duration: '6ч 29м', incoming: 29, pending: 8, team: ['Ольга Новак', 'Дарья Лис'], id: '85427' },
-];
-const STARTING = ['Лиам Грейсон', 'Мия Дженнингс'];
-const HISTORY = [
-  { id: '35001', name: 'Пётр Абрамов', agent: 'Иван Петров', date: '31.08.2026 09:14', duration: '06:22', result: 'Решено', rec: true, ticket: '85374' },
-  { id: '34988', name: 'ООО «Вектор»', agent: 'Мария Соколова', date: '30.08.2026 17:02', duration: '02:10', result: 'Перенос', rec: true, ticket: null },
-  { id: '34970', name: 'Кузнецов Д.И.', agent: 'Артём Ким', date: '30.08.2026 11:40', duration: '11:05', result: 'Не решено', rec: false, ticket: '85198' },
-  { id: '34955', name: 'ИП Соколова', agent: 'Ольга Новак', date: '29.08.2026 15:22', duration: '03:48', result: 'Решено', rec: true, ticket: null },
-];
 const RESULT_TONE = { Решено: 'success', 'Не решено': 'danger', Перенос: 'warning' };
+const RESULT_OPTIONS = [{ value: 'Решено', label: 'Решено' }, { value: 'Не решено', label: 'Не решено' }, { value: 'Перенос', label: 'Перенос' }];
 
 export function Calls() {
-  const [range, setRange] = useState('Дни');
   const [view, setView] = useState('Текущие');
+  const [current, setCurrent] = useState({ ongoing: [], starting: [], onBreak: [] });
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [wrapup, setWrapup] = useState(null);
+  const [wrapResult, setWrapResult] = useState('Решено');
+  const [wrapComment, setWrapComment] = useState('');
+  const [createTicket, setCreateTicket] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const req = view === 'Текущие' ? api.getCalls('ongoing') : api.getCalls('history');
+    req.then(data => {
+      if (view === 'Текущие') setCurrent(data); else setHistory(data);
+      setError(null);
+    }).catch(err => setError(err.message)).finally(() => setLoading(false));
+  }, [view]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openWrapup = (call) => {
+    setWrapup(call);
+    setWrapResult('Решено');
+    setWrapComment('');
+    setCreateTicket(false);
+  };
+
+  const submitWrapup = async () => {
+    setSubmitting(true);
+    try {
+      await api.wrapupCall(wrapup.id, { result: wrapResult, comment: wrapComment, createTicket, ticketFio: wrapup.name });
+      setWrapup(null);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div style={{ padding: 32, display: 'grid', gridTemplateColumns: '2.4fr 1fr', gap: 20 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ font: 'var(--text-display)', fontWeight: 800, color: 'var(--text-primary)' }}>Звонки</div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <Tabs items={['Текущие', 'История']} active={view} onChange={setView} />
-            {view === 'Текущие' && <Tabs items={['Дни', 'Недели', 'Месяцы']} active={range} onChange={setRange} />}
-          </div>
+          <Tabs items={['Текущие', 'История']} active={view} onChange={setView} />
         </div>
-        {view === 'Текущие' ? (
+        {error && <div style={{ color: 'var(--danger)', font: 'var(--text-body-sm)' }}>{error}</div>}
+        {loading && <div style={{ color: 'var(--text-tertiary)', font: 'var(--text-body-sm)' }}>Загрузка…</div>}
+        {!loading && view === 'Текущие' ? (
           <React.Fragment>
-            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)', padding: 20, height: 180, display: 'flex', alignItems: 'flex-end', gap: 6, boxShadow: 'var(--shadow-card)' }}>
-              {[40, 55, 30, 70, 90, 60, 45, 75, 50, 65, 80, 35].map((h, i) => (
-                <div key={i} style={{ flex: 1, height: h + '%', background: 'var(--grad-accent)', borderRadius: 6, opacity: h > 75 ? 1 : .55, boxShadow: h > 75 ? 'var(--shadow-glow-accent)' : 'none', transition: 'opacity .2s' }} />
-              ))}
-            </div>
             <div style={{ font: 'var(--text-h3)', fontWeight: 700, color: 'var(--text-primary)' }}>Текущие звонки</div>
+            {current.ongoing.length === 0 && <div style={{ color: 'var(--text-tertiary)', font: 'var(--text-body-sm)' }}>Нет активных звонков</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-              {ONGOING.map(c => (
+              {current.ongoing.map(c => (
                 <div key={c.id} className="lift" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, boxShadow: 'var(--shadow-card)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <Avatar name={c.name} status="busy" />
@@ -60,17 +84,18 @@ export function Calls() {
                     <AvatarStack names={c.team} size={22} />
                     <span style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)' }}>ID {c.id}</span>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => setWrapup(c)}>Завершить звонок</Button>
+                  <Button variant="secondary" size="sm" onClick={() => openWrapup(c)}>Завершить звонок</Button>
                 </div>
               ))}
             </div>
           </React.Fragment>
-        ) : (
+        ) : !loading && (
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '90px 1.4fr 1fr 1.2fr 90px 110px 90px', gap: 12, padding: '12px 20px', font: 'var(--text-caption)', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)' }}>
               <span>Запись</span><span>Клиент</span><span>Оператор</span><span>Дата</span><span>Длит.</span><span>Итог</span><span>Тикет</span>
             </div>
-            {HISTORY.map(h => (
+            {history.length === 0 && <div style={{ padding: 20, color: 'var(--text-tertiary)', font: 'var(--text-body-sm)' }}>История пуста</div>}
+            {history.map(h => (
               <div key={h.id} className="row-hover" style={{ display: 'grid', gridTemplateColumns: '90px 1.4fr 1fr 1.2fr 90px 110px 90px', gap: 12, padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: h.rec ? 'var(--accent-hover)' : 'var(--text-tertiary)' }}><Icon name="video" size={14} />{h.rec ? 'есть' : 'нет'}</span>
                 <span>{h.name}</span>
@@ -88,7 +113,8 @@ export function Calls() {
         <div>
           <div style={{ font: 'var(--text-h3)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>Начинаются звонки</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {STARTING.map(n => (
+            {current.starting.length === 0 && <div style={{ color: 'var(--text-tertiary)', font: 'var(--text-caption)' }}>Нет ожидающих звонков</div>}
+            {current.starting.map(n => (
               <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 10 }}>
                 <Avatar name={n} size={30} /><span style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)', flex: 1 }}>{n}</span><IconButton icon={<Icon name="phone" />} />
               </div>
@@ -98,7 +124,8 @@ export function Calls() {
         <div>
           <div style={{ font: 'var(--text-h3)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 12 }}>На перерыве</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[['Джек Линтон', '00:17'], ['Самуэль Уотерс', '06:09'], ['Генри Мерсер', '10:40']].map(([n, t]) => (
+            {current.onBreak.length === 0 && <div style={{ color: 'var(--text-tertiary)', font: 'var(--text-caption)' }}>Никого нет на перерыве</div>}
+            {current.onBreak.map(([n, t]) => (
               <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 10 }}>
                 <Avatar name={n} size={30} status="offline" /><span style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)', flex: 1 }}>{n}</span><Badge tone="warning">{t}</Badge>
               </div>
@@ -108,13 +135,13 @@ export function Calls() {
       </div>
       <Dialog open={!!wrapup} title={wrapup ? 'Завершение звонка — ' + wrapup.name : ''} onClose={() => setWrapup(null)}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Select options={[{ value: 'ok', label: 'Решено' }, { value: 'no', label: 'Не решено' }, { value: 'later', label: 'Перенос' }]} value="ok" />
-          <Input placeholder="Комментарий по звонку" />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 8 }}>
-            <Button variant="ghost">Создать обращение из звонка</Button>
+          <Select options={RESULT_OPTIONS} value={wrapResult} onChange={setWrapResult} />
+          <Input placeholder="Комментарий по звонку" value={wrapComment} onChange={e => setWrapComment(e.target.value)} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 8, alignItems: 'center' }}>
+            <Button variant="ghost" onClick={() => setCreateTicket(v => !v)}>{createTicket ? '✓ Обращение будет создано' : 'Создать обращение из звонка'}</Button>
             <div style={{ display: 'flex', gap: 8 }}>
               <Button variant="ghost" onClick={() => setWrapup(null)}>Отмена</Button>
-              <Button variant="primary" onClick={() => setWrapup(null)}>Сохранить</Button>
+              <Button variant="primary" onClick={submitWrapup} disabled={submitting}>{submitting ? 'Сохранение…' : 'Сохранить'}</Button>
             </div>
           </div>
         </div>

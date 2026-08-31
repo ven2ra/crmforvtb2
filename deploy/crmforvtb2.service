@@ -1,0 +1,16 @@
+[Unit]
+Description=ЕРС CRM (crmforvtb2)
+After=network.target
+
+[Service]
+Type=simple
+User=crmapp
+WorkingDirectory=/opt/crmforvtb2
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStart=/usr/bin/node server/index.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
