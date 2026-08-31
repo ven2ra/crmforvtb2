@@ -1,0 +1,25 @@
+<!-- @dsCard group="CRM" viewport="1440x860" name="CRM — рабочее пространство" subtitle="Главная, обращения, звонки, чаты, история — интерактивный прототип" -->
+<!DOCTYPE html><html><head><meta charset="utf-8"><title>ЕРС CRM</title>
+<link rel="stylesheet" href="../../styles.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;position:relative}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(55% 38% at 15% -5%,rgba(139,92,246,.20),transparent 60%),radial-gradient(45% 30% at 105% 105%,rgba(244,114,182,.13),transparent 60%)}
+#root{position:relative;z-index:1}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--ink-500);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-400)}
+.lift{transition:transform .22s cubic-bezier(.4,0,.2,1),box-shadow .22s cubic-bezier(.4,0,.2,1)}
+.lift:hover{transform:translateY(-3px);box-shadow:var(--shadow-pop)}
+.row-hover{transition:background .15s}
+.row-hover:hover{background:var(--bg-surface-2)}
+button{font-family:inherit}
+button:hover:not(:disabled){filter:brightness(1.08)}
+button:active:not(:disabled){filter:brightness(.96)}
+</style>
+</head><body><div id="root" style="height:100vh"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+</body></html>

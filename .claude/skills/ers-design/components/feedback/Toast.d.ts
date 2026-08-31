@@ -1,0 +1,2 @@
+export interface ToastProps { variant?: 'success' | 'danger' | 'warning' | 'info'; title: string; description?: string; onClose?: () => void; style?: React.CSSProperties; }
+export function Toast(props: ToastProps): JSX.Element;

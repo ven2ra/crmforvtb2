@@ -1,0 +1,20 @@
+@import url('./tokens/colors.css');
+@import url('./tokens/typography.css');
+@import url('./tokens/spacing.css');
+@import url('./tokens/effects.css');
+
+*{box-sizing:border-box}
+body{margin:0;position:relative;background:var(--bg-canvas);color:var(--text-primary);font:var(--text-body);}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(55% 38% at 15% -5%,rgba(139,92,246,.20),transparent 60%),radial-gradient(45% 30% at 105% 105%,rgba(244,114,182,.13),transparent 60%)}
+#root{position:relative;z-index:1}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--ink-500);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-400)}
+.lift{transition:transform .22s cubic-bezier(.4,0,.2,1),box-shadow .22s cubic-bezier(.4,0,.2,1)}
+.lift:hover{transform:translateY(-3px);box-shadow:var(--shadow-pop)}
+.row-hover{transition:background .15s}
+.row-hover:hover{background:var(--bg-surface-2)}
+button{font-family:inherit}
+button:hover:not(:disabled){filter:brightness(1.08)}
+button:active:not(:disabled){filter:brightness(.96)}

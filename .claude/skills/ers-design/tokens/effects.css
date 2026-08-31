@@ -1,0 +1,11 @@
+:root{
+--shadow-card:0 1px 0 rgba(255,255,255,.03) inset,0 8px 24px rgba(0,0,0,.35);
+--shadow-pop:0 16px 40px rgba(0,0,0,.5);
+--shadow-glow-accent:0 8px 28px rgba(139,92,246,.35);
+--blur-glass:blur(20px); /* @kind other */
+--ease-standard:cubic-bezier(.4,0,.2,1); /* @kind other */
+--ease-out:cubic-bezier(0,0,.2,1); /* @kind other */
+--dur-fast:120ms; /* @kind other */
+--dur-normal:200ms; /* @kind other */
+--dur-slow:320ms; /* @kind other */
+}
