@@ -1,18 +1,10 @@
 import { Router } from 'express';
 import db from '../db.js';
+import { currentEmployeeId } from '../lib/currentEmployee.js';
 
 export const router = Router();
 
 const fmtDate = (iso) => iso?.slice(0, 10).split('-').reverse().join('.');
-
-// В приложении пока нет полноценной авторизации — карточка оператора в
-// сайдбаре зафиксирована на "Иван Петров", поэтому новые чаты, заведённые
-// вручную через форму, тоже относим на него.
-function currentEmployeeId() {
-  const row = db.prepare("SELECT id FROM employees WHERE name = 'Иван Петров' LIMIT 1").get()
-    || db.prepare('SELECT id FROM employees LIMIT 1').get();
-  return row?.id ?? null;
-}
 
 function chatSummary(c) {
   return {

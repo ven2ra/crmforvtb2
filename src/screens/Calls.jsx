@@ -5,15 +5,9 @@ import { Badge } from '../components/core/Badge.jsx';
 import { Tabs } from '../components/navigation/Tabs.jsx';
 import { IconButton } from '../components/core/IconButton.jsx';
 import { Button } from '../components/core/Button.jsx';
-import { Dialog } from '../components/overlay/Dialog.jsx';
-import { Select } from '../components/forms/Select.jsx';
-import { Input } from '../components/forms/Input.jsx';
-import { StartCallDialog } from '../components/call/StartCallDialog.jsx';
+import { CallLivePage } from '../components/call/CallLivePage.jsx';
 import { NewTicketDialog } from '../components/ticket/NewTicketDialog.jsx';
 import { api } from '../lib/api.js';
-
-const RESULT_TONE = { Решено: 'success', 'Не решено': 'danger', Перенос: 'warning' };
-const RESULT_OPTIONS = [{ value: 'Решено', label: 'Решено' }, { value: 'Не решено', label: 'Не решено' }, { value: 'Перенос', label: 'Перенос' }];
 
 export function Calls() {
   const [view, setView] = useState('Текущие');
@@ -21,13 +15,9 @@ export function Calls() {
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [wrapup, setWrapup] = useState(null);
-  const [wrapResult, setWrapResult] = useState('Решено');
-  const [wrapComment, setWrapComment] = useState('');
-  const [createTicket, setCreateTicket] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [startOpen, setStartOpen] = useState(false);
+  const [liveCallId, setLiveCallId] = useState(null);
   const [ticketPrefill, setTicketPrefill] = useState(null);
+  const [starting, setStarting] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -38,27 +28,29 @@ export function Calls() {
     }).catch(err => setError(err.message)).finally(() => setLoading(false));
   }, [view]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (!liveCallId) load(); }, [load, liveCallId]);
 
-  const openWrapup = (call) => {
-    setWrapup(call);
-    setWrapResult('Решено');
-    setWrapComment('');
-    setCreateTicket(false);
-  };
-
-  const submitWrapup = async () => {
-    setSubmitting(true);
+  const startCall = async () => {
+    setStarting(true);
     try {
-      await api.wrapupCall(wrapup.id, { result: wrapResult, comment: wrapComment, createTicket, ticketFio: wrapup.name });
-      setWrapup(null);
-      load();
+      const call = await api.startCall();
+      setLiveCallId(call.id);
     } catch (err) {
       setError(err.message);
     } finally {
-      setSubmitting(false);
+      setStarting(false);
     }
   };
+
+  const onCallFinished = (needsTicket) => {
+    setLiveCallId(null);
+    load();
+    if (needsTicket) setTicketPrefill(needsTicket);
+  };
+
+  if (liveCallId != null) {
+    return <CallLivePage callId={liveCallId} onExit={() => { setLiveCallId(null); load(); }} onFinished={onCallFinished} />;
+  }
 
   return (
     <div style={{ padding: 32, display: 'grid', gridTemplateColumns: '2.4fr 1fr', gap: 20 }}>
@@ -67,7 +59,7 @@ export function Calls() {
           <div style={{ font: 'var(--text-display)', fontWeight: 800, color: 'var(--text-primary)' }}>Звонки</div>
           <div style={{ display: 'flex', gap: 10 }}>
             <Tabs items={['Текущие', 'История']} active={view} onChange={setView} />
-            <Button variant="primary" onClick={() => setStartOpen(true)}>+ Начать звонок</Button>
+            <Button variant="primary" onClick={startCall} disabled={starting}>{starting ? 'Начинаем…' : '+ Начать звонок'}</Button>
           </div>
         </div>
         {error && <div style={{ color: 'var(--danger)', font: 'var(--text-body-sm)' }}>{error}</div>}
@@ -80,8 +72,8 @@ export function Calls() {
               {current.ongoing.map(c => (
                 <div key={c.id} className="lift" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)', padding: 16, display: 'flex', flexDirection: 'column', gap: 10, boxShadow: 'var(--shadow-card)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <Avatar name={c.name} status="busy" />
-                    <div><div style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)', fontWeight: 600 }}>{c.name}</div><div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)' }}>{c.duration}</div></div>
+                    <Avatar name={c.name || '?'} status="busy" />
+                    <div><div style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)', fontWeight: 600 }}>{c.name || 'Без номера'}</div><div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>{c.duration}</div></div>
                   </div>
                   <div style={{ display: 'flex', gap: 14, font: 'var(--text-caption)', color: 'var(--text-secondary)', alignItems: 'center' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Icon name="phone" size={12} />{c.incoming}</span>
@@ -91,22 +83,26 @@ export function Calls() {
                     <AvatarStack names={c.team} size={22} />
                     <span style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)' }}>ID {c.id}</span>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => openWrapup(c)}>Завершить звонок</Button>
+                  {c.isMine ? (
+                    <Button variant="secondary" size="sm" onClick={() => setLiveCallId(c.id)}>Продолжить звонок</Button>
+                  ) : (
+                    <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', textAlign: 'center', padding: '6px 0' }}>Звонок другого оператора</div>
+                  )}
                 </div>
               ))}
             </div>
           </React.Fragment>
         ) : !loading && (
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)', overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '90px 1.4fr 1fr 1.2fr 90px 110px 90px', gap: 12, padding: '12px 20px', font: 'var(--text-caption)', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)' }}>
-              <span>Запись</span><span>Клиент</span><span>Оператор</span><span>Дата</span><span>Длит.</span><span>Итог</span><span>Тикет</span>
+            <div style={{ display: 'grid', gridTemplateColumns: '90px 1.4fr 1.2fr 90px 1fr 90px', gap: 12, padding: '12px 20px', font: 'var(--text-caption)', color: 'var(--text-tertiary)', borderBottom: '1px solid var(--border-subtle)' }}>
+              <span>Запись</span><span>Клиент</span><span>Дата</span><span>Длит.</span><span>Тематика</span><span>Тикет</span>
             </div>
             {history.length === 0 && <div style={{ padding: 20, color: 'var(--text-tertiary)', font: 'var(--text-body-sm)' }}>История пуста</div>}
             {history.map(h => (
-              <div key={h.id} className="row-hover" style={{ display: 'grid', gridTemplateColumns: '90px 1.4fr 1fr 1.2fr 90px 110px 90px', gap: 12, padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>
+              <div key={h.id} className="row-hover" style={{ display: 'grid', gridTemplateColumns: '90px 1.4fr 1.2fr 90px 1fr 90px', gap: 12, padding: '14px 20px', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: h.rec ? 'var(--accent-hover)' : 'var(--text-tertiary)' }}><Icon name="video" size={14} />{h.rec ? 'есть' : 'нет'}</span>
                 <div>
-                  <div>{h.name}</div>
+                  <div>{h.name || 'Без номера'}</div>
                   {(h.malfunction || h.transferCorrect === false) && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
                       {h.malfunction && <Badge tone="danger">Сбой</Badge>}
@@ -114,10 +110,9 @@ export function Calls() {
                     </div>
                   )}
                 </div>
-                <span style={{ color: 'var(--text-secondary)' }}>{h.agent || '—'}</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>{h.date}</span>
                 <span style={{ color: 'var(--text-tertiary)' }}>{h.duration}</span>
-                {h.result ? <Badge tone={RESULT_TONE[h.result]} dot>{h.result}</Badge> : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
+                <span style={{ color: 'var(--text-secondary)' }}>{h.topic || '—'}</span>
                 {h.ticket ? <Badge tone="accent">№{h.ticket}</Badge> : <span style={{ color: 'var(--text-tertiary)' }}>—</span>}
               </div>
             ))}
@@ -148,25 +143,6 @@ export function Calls() {
           </div>
         </div>
       </div>
-      <Dialog open={!!wrapup} title={wrapup ? 'Завершение звонка — ' + wrapup.name : ''} onClose={() => setWrapup(null)}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Select options={RESULT_OPTIONS} value={wrapResult} onChange={setWrapResult} />
-          <Input placeholder="Комментарий по звонку" value={wrapComment} onChange={e => setWrapComment(e.target.value)} />
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', marginTop: 8, alignItems: 'center' }}>
-            <Button variant="ghost" onClick={() => setCreateTicket(v => !v)}>{createTicket ? '✓ Обращение будет создано' : 'Создать обращение из звонка'}</Button>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Button variant="ghost" onClick={() => setWrapup(null)}>Отмена</Button>
-              <Button variant="primary" onClick={submitWrapup} disabled={submitting}>{submitting ? 'Сохранение…' : 'Сохранить'}</Button>
-            </div>
-          </div>
-        </div>
-      </Dialog>
-      <StartCallDialog
-        open={startOpen}
-        onClose={() => setStartOpen(false)}
-        onLogged={() => { setStartOpen(false); load(); }}
-        onNeedsTicket={(prefill) => { setStartOpen(false); setTicketPrefill(prefill); }}
-      />
       <NewTicketDialog
         open={!!ticketPrefill}
         initial={ticketPrefill}
