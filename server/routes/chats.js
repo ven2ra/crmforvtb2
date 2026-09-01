@@ -6,19 +6,25 @@ export const router = Router();
 
 const fmtDate = (iso) => iso?.slice(0, 10).split('-').reverse().join('.');
 
+// SQLite's datetime('now') stores UTC as "YYYY-MM-DD HH:MM:SS" with no
+// timezone marker; mark it explicitly as UTC so the browser doesn't parse
+// it as local time.
+const toIsoUtc = (ts) => (!ts || ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z');
+
 function chatSummary(c) {
   return {
     id: c.id,
-    name: c.client_name,
-    gkkUnk: c.gkk_unk,
-    topic: c.topic,
-    essence: c.essence,
+    name: c.client_name || '',
+    gkkUnk: c.gkk_unk || '',
+    topic: c.topic || '',
+    essence: c.essence || '',
     status: c.status === 'active' ? 'Активные' : 'Закрытые',
     date: fmtDate(c.created_at),
-    time: c.created_at ? new Date(c.created_at).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '',
+    time: c.created_at ? new Date(toIsoUtc(c.created_at)).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }) : '',
     ticket: c.ticket_number || null,
     transferCorrect: c.transfer_correct == null ? null : !!c.transfer_correct,
     malfunction: !!c.malfunction,
+    requiresTicket: !!c.requires_ticket,
   };
 }
 
@@ -29,21 +35,16 @@ router.get('/', (req, res) => {
   res.json(rows.map(chatSummary));
 });
 
-// Приём чата: оператор фиксирует данные обратившегося и параметры чата
-// одной формой в момент открытия диалога — сам чат в системе не ведётся,
-// это только запись о факте обращения.
+// Начать чат: создаём пустую запись сразу и открываем её как редактируемую
+// карточку — оператор ещё не знает данные клиента в момент нажатия кнопки,
+// поэтому поля дозаполняются и автосохраняются по ходу разговора (PATCH),
+// как и у звонков.
 router.post('/', (req, res) => {
-  const { fio, gkkUnk, topic, essence, transferCorrect, malfunction, requiresTicket } = req.body;
-  if (!fio || !fio.trim()) return res.status(400).json({ error: 'fio is required' });
   const info = db.prepare(`
-    INSERT INTO chats (client_name, gkk_unk, topic, essence, agent_id, status, transfer_correct, malfunction, requires_ticket)
-    VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?)
-  `).run(
-    fio.trim(), (gkkUnk || '').trim() || null, topic || '', essence || '', currentEmployeeId(),
-    transferCorrect ? 1 : 0, malfunction ? 1 : 0, requiresTicket ? 1 : 0
-  );
+    INSERT INTO chats (client_name, agent_id, status) VALUES ('', ?, 'active')
+  `).run(currentEmployeeId());
   const c = db.prepare('SELECT c.*, t.number AS ticket_number FROM chats c LEFT JOIN tickets t ON t.id = c.ticket_id WHERE c.id = ?').get(info.lastInsertRowid);
-  res.status(201).json({ ...chatSummary(c), requiresTicket: !!c.requires_ticket, tags: [], note: '' });
+  res.status(201).json({ ...chatSummary(c), tags: [], note: '' });
 });
 
 router.get('/:id', (req, res) => {
@@ -56,15 +57,34 @@ router.get('/:id', (req, res) => {
 });
 
 router.patch('/:id', (req, res) => {
-  const { status } = req.body;
-  const statusMap = { 'Активные': 'active', 'Закрытые': 'closed' };
-  const dbStatus = statusMap[status] || status;
+  const { fio, gkkUnk, topic, essence, transferCorrect, malfunction, requiresTicket, status } = req.body;
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id);
   if (!chat) return res.status(404).json({ error: 'not found' });
+
+  const statusMap = { 'Активные': 'active', 'Закрытые': 'closed' };
+  const dbStatus = statusMap[status] || status;
   if (dbStatus && ['active', 'closed'].includes(dbStatus)) {
     db.prepare("UPDATE chats SET status = ?, closed_at = CASE WHEN ? = 'closed' THEN datetime('now') ELSE closed_at END WHERE id = ?")
       .run(dbStatus, dbStatus, req.params.id);
   }
+  db.prepare(`
+    UPDATE chats SET
+      client_name = COALESCE(?, client_name),
+      gkk_unk = COALESCE(?, gkk_unk),
+      topic = COALESCE(?, topic),
+      essence = COALESCE(?, essence),
+      transfer_correct = COALESCE(?, transfer_correct),
+      malfunction = COALESCE(?, malfunction),
+      requires_ticket = COALESCE(?, requires_ticket)
+    WHERE id = ?
+  `).run(
+    fio ?? null, gkkUnk ?? null, topic ?? null, essence ?? null,
+    transferCorrect == null ? null : (transferCorrect ? 1 : 0),
+    malfunction == null ? null : (malfunction ? 1 : 0),
+    requiresTicket == null ? null : (requiresTicket ? 1 : 0),
+    req.params.id
+  );
+
   const c = db.prepare('SELECT c.*, t.number AS ticket_number FROM chats c LEFT JOIN tickets t ON t.id = c.ticket_id WHERE c.id = ?').get(req.params.id);
   const tags = db.prepare('SELECT id, tag FROM chat_tags WHERE chat_id = ?').all(c.id);
   res.json({ ...chatSummary(c), note: c.note, tags });

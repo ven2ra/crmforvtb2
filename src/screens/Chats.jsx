@@ -5,7 +5,7 @@ import { Badge } from '../components/core/Badge.jsx';
 import { Tag } from '../components/feedback/Tag.jsx';
 import { Tabs } from '../components/navigation/Tabs.jsx';
 import { Button } from '../components/core/Button.jsx';
-import { StartChatDialog } from '../components/chat/StartChatDialog.jsx';
+import { YesNoToggle } from '../components/common/YesNoToggle.jsx';
 import { NewTicketDialog } from '../components/ticket/NewTicketDialog.jsx';
 import { api } from '../lib/api.js';
 
@@ -14,11 +14,15 @@ export function Chats() {
   const [chats, setChats] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [chat, setChat] = useState(null);
+  const [fio, setFio] = useState('');
+  const [gkkUnk, setGkkUnk] = useState('');
+  const [topic, setTopic] = useState('');
+  const [essence, setEssence] = useState('');
   const [newTag, setNewTag] = useState('');
   const [error, setError] = useState(null);
-  const [startOpen, setStartOpen] = useState(false);
   const [ticketPrefill, setTicketPrefill] = useState(null);
   const [closing, setClosing] = useState(false);
+  const [starting, setStarting] = useState(false);
 
   const visible = chats.filter(c => c.status === filter);
 
@@ -38,8 +42,32 @@ export function Chats() {
 
   useEffect(() => {
     if (activeId == null) { setChat(null); return; }
-    api.getChat(activeId).then(setChat).catch(err => setError(err.message));
+    api.getChat(activeId).then(c => {
+      setChat(c);
+      setFio(c.name);
+      setGkkUnk(c.gkkUnk);
+      setTopic(c.topic);
+      setEssence(c.essence);
+    }).catch(err => setError(err.message));
   }, [activeId]);
+
+  const startChat = async () => {
+    setStarting(true);
+    try {
+      const c = await api.startChat();
+      setFilter('Активные');
+      loadChats();
+      setActiveId(c.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const patch = (data) => {
+    api.updateChat(chat.id, data).then(c => { setChat(c); loadChats(); }).catch(err => setError(err.message));
+  };
 
   const addTag = async () => {
     if (!newTag.trim() || !chat) return;
@@ -79,7 +107,7 @@ export function Chats() {
     <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', height: '100%' }}>
       <div style={{ borderRight: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '20px 20px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <Button variant="primary" onClick={() => setStartOpen(true)} style={{ width: '100%' }}>+ Начать чат</Button>
+          <Button variant="primary" onClick={startChat} disabled={starting} style={{ width: '100%' }}>{starting ? 'Начинаем…' : '+ Начать чат'}</Button>
           <Input icon="search" placeholder="Поиск чатов" />
           <Tabs items={['Активные', 'Закрытые']} active={filter} onChange={setFilter} />
         </div>
@@ -87,9 +115,9 @@ export function Chats() {
           {visible.length === 0 && <div style={{ padding: '12px 20px', color: 'var(--text-tertiary)', font: 'var(--text-body-sm)' }}>Нет чатов</div>}
           {visible.map(c => (
             <div key={c.id} onClick={() => setActiveId(c.id)} className="row-hover" style={{ display: 'flex', gap: 12, padding: '12px 20px', cursor: 'pointer', background: activeId === c.id ? 'var(--bg-surface-2)' : 'transparent' }}>
-              <Avatar name={c.name} />
+              <Avatar name={c.name || '?'} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)', fontWeight: 600 }}>{c.name}</span><span style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)' }}>{c.time}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}><span style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)', fontWeight: 600 }}>{c.name || 'Новый чат'}</span><span style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)' }}>{c.time}</span></div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ font: 'var(--text-caption)', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.topic || '—'}</span>
                   {c.ticket && <Badge tone="accent">№{c.ticket}</Badge>}
@@ -103,44 +131,56 @@ export function Chats() {
         {!chat ? (
           <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-tertiary)' }}>Выберите чат</div>
         ) : (
-          <div style={{ maxWidth: 640, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ maxWidth: 720, display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <Avatar name={chat.name} size={44} />
+              <Avatar name={fio || '?'} size={44} />
               <div style={{ flex: 1 }}>
-                <div style={{ font: 'var(--text-h2)', fontWeight: 700, color: 'var(--text-primary)' }}>{chat.name}</div>
-                <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginTop: 2 }}>{chat.date} · {chat.time}</div>
+                <Input
+                  placeholder="ФИО клиента"
+                  value={fio}
+                  onChange={e => setFio(e.target.value)}
+                  onBlur={() => patch({ fio })}
+                  style={{ font: 'var(--text-h3)', fontWeight: 700 }}
+                />
+                <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginTop: 4 }}>{chat.date} · {chat.time}</div>
               </div>
               <Badge tone={chat.status === 'Активные' ? 'accent' : 'success'} dot>{chat.status === 'Активные' ? 'Активен' : 'Закрыт'}</Badge>
             </div>
 
+            {error && <div style={{ color: 'var(--danger)', font: 'var(--text-body-sm)' }}>{error}</div>}
+
             <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xl)', padding: 20, boxShadow: 'var(--shadow-card)', display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <div>
-                  <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>ГКК (УНК)</div>
-                  <div style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>{chat.gkkUnk || '—'}</div>
-                </div>
-                <div>
-                  <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>Тематика</div>
-                  <div style={{ font: 'var(--text-body-sm)', color: 'var(--text-primary)' }}>{chat.topic || '—'}</div>
-                </div>
+                <Input label="ГКК (УНК)" placeholder="Например: УНК-4521" value={gkkUnk} onChange={e => setGkkUnk(e.target.value)} onBlur={() => patch({ gkkUnk })} />
+                <Input label="Тематика" placeholder="Например: Возврат средств" value={topic} onChange={e => setTopic(e.target.value)} onBlur={() => patch({ topic })} />
               </div>
-              {chat.essence && (
-                <div>
-                  <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.04em' }}>Суть вопроса</div>
-                  <div style={{ font: 'var(--text-body-sm)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{chat.essence}</div>
-                </div>
-              )}
-              {(chat.malfunction || chat.transferCorrect === false) && (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {chat.malfunction && <Badge tone="danger">Сбой</Badge>}
-                  {chat.transferCorrect === false && <Badge tone="danger">Некорр. перевод</Badge>}
-                </div>
-              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ font: 'var(--text-body-sm)', color: 'var(--text-secondary)', fontWeight: 600 }}>Суть вопроса</span>
+                <textarea
+                  placeholder="Опишите суть вопроса клиента..."
+                  value={essence}
+                  onChange={e => setEssence(e.target.value)}
+                  onBlur={() => patch({ essence })}
+                  style={{ width: '100%', minHeight: 80, background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 10, color: 'var(--text-primary)', font: 'var(--text-body-sm)', resize: 'vertical' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, background: 'var(--bg-surface-2)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: 14 }}>
+              <YesNoToggle label="Перевод корректный?" value={chat.transferCorrect} onChange={v => patch({ transferCorrect: v })} badSide="no" />
+              <YesNoToggle label="Сбой?" value={chat.malfunction} onChange={v => patch({ malfunction: v })} badSide="yes" />
+              <YesNoToggle label="Требуется обращение?" value={chat.requiresTicket} onChange={v => patch({ requiresTicket: v })} />
             </div>
 
             <div>
               <div style={{ font: 'var(--text-caption)', color: 'var(--text-tertiary)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '.04em' }}>Привязка</div>
-              {chat.ticket ? <Badge tone="accent" dot>Обращение №{chat.ticket}</Badge> : <span style={{ font: 'var(--text-body-sm)', color: 'var(--text-tertiary)' }}>Не привязан к обращению</span>}
+              {chat.ticket ? (
+                <Badge tone="accent" dot>Обращение №{chat.ticket}</Badge>
+              ) : chat.requiresTicket ? (
+                <Button variant="secondary" size="sm" onClick={() => setTicketPrefill({ chatId: chat.id, fio, topic, essence })}>Создать обращение</Button>
+              ) : (
+                <span style={{ font: 'var(--text-body-sm)', color: 'var(--text-tertiary)' }}>Не привязан к обращению</span>
+              )}
             </div>
 
             <div>
@@ -170,19 +210,12 @@ export function Chats() {
           </div>
         )}
       </div>
-      {error && <div style={{ position: 'fixed', bottom: 16, right: 16, background: 'var(--danger-soft)', color: 'var(--danger)', padding: '10px 16px', borderRadius: 'var(--radius-md)', font: 'var(--text-body-sm)' }} onClick={() => setError(null)}>{error}</div>}
-      <StartChatDialog
-        open={startOpen}
-        onClose={() => setStartOpen(false)}
-        onStarted={(chatId) => { setStartOpen(false); setFilter('Активные'); loadChats(); setActiveId(chatId); }}
-        onNeedsTicket={(prefill) => { setStartOpen(false); setTicketPrefill(prefill); }}
-      />
       <NewTicketDialog
         open={!!ticketPrefill}
         initial={ticketPrefill}
         source={ticketPrefill ? { chatId: ticketPrefill.chatId } : undefined}
         onClose={() => setTicketPrefill(null)}
-        onCreated={() => { setTicketPrefill(null); setFilter('Активные'); loadChats(); if (ticketPrefill) setActiveId(ticketPrefill.chatId); }}
+        onCreated={() => { setTicketPrefill(null); loadChats(); if (activeId) api.getChat(activeId).then(setChat); }}
       />
     </div>
   );
