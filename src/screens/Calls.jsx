@@ -6,17 +6,15 @@ import { Tabs } from '../components/navigation/Tabs.jsx';
 import { IconButton } from '../components/core/IconButton.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { CallLivePage } from '../components/call/CallLivePage.jsx';
-import { NewTicketDialog } from '../components/ticket/NewTicketDialog.jsx';
 import { api } from '../lib/api.js';
 
-export function Calls() {
+export function Calls({ onOpenTicket }) {
   const [view, setView] = useState('Текущие');
   const [current, setCurrent] = useState({ ongoing: [], starting: [], onBreak: [] });
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [liveCallId, setLiveCallId] = useState(null);
-  const [ticketPrefill, setTicketPrefill] = useState(null);
   const [starting, setStarting] = useState(false);
 
   const load = useCallback(() => {
@@ -42,10 +40,18 @@ export function Calls() {
     }
   };
 
-  const onCallFinished = (needsTicket) => {
+  const onCallFinished = async (needsTicket) => {
     setLiveCallId(null);
+    if (needsTicket) {
+      try {
+        const ticket = await api.createTicket(needsTicket);
+        onOpenTicket(ticket.id);
+        return;
+      } catch (err) {
+        setError(err.message);
+      }
+    }
     load();
-    if (needsTicket) setTicketPrefill(needsTicket);
   };
 
   if (liveCallId != null) {
@@ -143,13 +149,6 @@ export function Calls() {
           </div>
         </div>
       </div>
-      <NewTicketDialog
-        open={!!ticketPrefill}
-        initial={ticketPrefill}
-        source={ticketPrefill ? { callId: ticketPrefill.callId } : undefined}
-        onClose={() => setTicketPrefill(null)}
-        onCreated={() => { setTicketPrefill(null); load(); }}
-      />
     </div>
   );
 }

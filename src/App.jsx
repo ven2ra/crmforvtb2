@@ -10,12 +10,16 @@ const SCREENS = { home: Home, tickets: Tickets, calls: Calls, chats: Chats, hist
 
 export function App() {
   const [tab, setTab] = useState('home');
+  const [openTicketId, setOpenTicketId] = useState(null);
   const Screen = SCREENS[tab];
+
+  const openTicket = (id) => { setTab('tickets'); setOpenTicketId(id); };
+
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-canvas)', fontFamily: 'var(--font-sans)', overflow: 'hidden' }}>
       <Sidebar active={tab} onNav={setTab} />
       <div style={{ flex: 1, overflowY: 'auto' }}>
-        <Screen />
+        <Screen openTicketId={openTicketId} onOpenTicketIdChange={setOpenTicketId} onOpenTicket={openTicket} />
       </div>
     </div>
   );

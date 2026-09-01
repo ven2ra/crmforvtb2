@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import db from '../db.js';
+import { currentEmployeeId } from '../lib/currentEmployee.js';
 
 export const router = Router();
 
@@ -83,27 +84,29 @@ router.get('/:id', (req, res) => {
   res.json({ ...ticketRow(t), createdAt: fmtDate(t.created_at), closedAt: t.closed_at ? fmtDate(t.closed_at) : null, rating: t.rating });
 });
 
+// Новое обращение: создаём запись сразу (пустую, либо с тем, что уже
+// известно из звонка/чата) и открываем её как редактируемую страницу —
+// остальные поля дозаполняются и автосохраняются по ходу (PATCH), как у
+// звонков и чатов.
 router.post('/', (req, res) => {
   const { fio, agreement, topic, essence, sd, ownerId, callId, chatId } = req.body;
-  if (!fio || !fio.trim()) return res.status(400).json({ error: 'fio is required' });
-  if (!topic || !topic.trim()) return res.status(400).json({ error: 'topic is required' });
   const number = String(80000 + db.prepare('SELECT COUNT(*) AS n FROM tickets').get().n + Math.floor(Math.random() * 5000));
   let owner = ownerId;
   if (!owner && callId) owner = db.prepare('SELECT agent_id FROM calls WHERE id = ?').get(callId)?.agent_id;
   if (!owner && chatId) owner = db.prepare('SELECT agent_id FROM chats WHERE id = ?').get(chatId)?.agent_id;
-  owner = owner || db.prepare('SELECT id FROM employees ORDER BY RANDOM() LIMIT 1').get()?.id || null;
+  owner = owner || currentEmployeeId();
   const info = db.prepare(`
     INSERT INTO tickets (number, client_name, agreement_number, topic, sd_number, essence, status, owner_id)
     VALUES (?, ?, ?, ?, ?, ?, 'new', ?)
-  `).run(number, fio.trim(), agreement || '', topic.trim(), sd?.trim() || 'Запрос в ПП', essence || '', owner);
+  `).run(number, (fio || '').trim(), agreement || '', (topic || '').trim(), sd?.trim() || 'Запрос в ПП', essence || '', owner);
   if (callId) db.prepare('UPDATE calls SET ticket_id = ? WHERE id = ?').run(info.lastInsertRowid, callId);
   if (chatId) db.prepare('UPDATE chats SET ticket_id = ? WHERE id = ?').run(info.lastInsertRowid, chatId);
   const row = db.prepare('SELECT t.*, e.name AS owner_name FROM tickets t LEFT JOIN employees e ON e.id = t.owner_id WHERE t.id = ?').get(info.lastInsertRowid);
-  res.status(201).json(ticketRow(row));
+  res.status(201).json({ ...ticketRow(row), createdAt: fmtDate(row.created_at), closedAt: null, rating: null });
 });
 
 router.patch('/:id', (req, res) => {
-  const { status, rating, ownerId, topic, essence } = req.body;
+  const { status, rating, ownerId, fio, agreement, topic, essence, sd } = req.body;
   const statusMap = { 'Новое': 'new', 'В работе': 'in_progress', 'Закрыто': 'closed' };
   const dbStatus = statusMap[status] || status;
   const ticket = db.prepare('SELECT * FROM tickets WHERE id = ?').get(req.params.id);
@@ -114,8 +117,11 @@ router.patch('/:id', (req, res) => {
   }
   if (rating != null) db.prepare('UPDATE tickets SET rating = ? WHERE id = ?').run(rating, req.params.id);
   if (ownerId != null) db.prepare('UPDATE tickets SET owner_id = ? WHERE id = ?').run(ownerId, req.params.id);
-  if (topic != null && topic.trim()) db.prepare('UPDATE tickets SET topic = ? WHERE id = ?').run(topic.trim(), req.params.id);
+  if (fio != null) db.prepare('UPDATE tickets SET client_name = ? WHERE id = ?').run(fio.trim(), req.params.id);
+  if (agreement != null) db.prepare('UPDATE tickets SET agreement_number = ? WHERE id = ?').run(agreement.trim(), req.params.id);
+  if (topic != null) db.prepare('UPDATE tickets SET topic = ? WHERE id = ?').run(topic.trim(), req.params.id);
   if (essence != null) db.prepare('UPDATE tickets SET essence = ? WHERE id = ?').run(essence, req.params.id);
+  if (sd != null) db.prepare('UPDATE tickets SET sd_number = ? WHERE id = ?').run(sd.trim() || 'Запрос в ПП', req.params.id);
   const row = db.prepare('SELECT t.*, e.name AS owner_name FROM tickets t LEFT JOIN employees e ON e.id = t.owner_id WHERE t.id = ?').get(req.params.id);
   res.json({ ...ticketRow(row), createdAt: fmtDate(row.created_at), closedAt: row.closed_at ? fmtDate(row.closed_at) : null, rating: row.rating });
 });

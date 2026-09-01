@@ -6,10 +6,9 @@ import { Tag } from '../components/feedback/Tag.jsx';
 import { Tabs } from '../components/navigation/Tabs.jsx';
 import { Button } from '../components/core/Button.jsx';
 import { YesNoToggle } from '../components/common/YesNoToggle.jsx';
-import { NewTicketDialog } from '../components/ticket/NewTicketDialog.jsx';
 import { api } from '../lib/api.js';
 
-export function Chats() {
+export function Chats({ onOpenTicket }) {
   const [filter, setFilter] = useState('Активные');
   const [chats, setChats] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -20,9 +19,9 @@ export function Chats() {
   const [essence, setEssence] = useState('');
   const [newTag, setNewTag] = useState('');
   const [error, setError] = useState(null);
-  const [ticketPrefill, setTicketPrefill] = useState(null);
   const [closing, setClosing] = useState(false);
   const [starting, setStarting] = useState(false);
+  const [creatingTicket, setCreatingTicket] = useState(false);
 
   const visible = chats.filter(c => c.status === filter);
 
@@ -87,6 +86,18 @@ export function Chats() {
       setChat(await api.getChat(chat.id));
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const createTicketFromChat = async () => {
+    setCreatingTicket(true);
+    try {
+      const ticket = await api.createTicket({ chatId: chat.id, fio, topic, essence });
+      onOpenTicket(ticket.id);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setCreatingTicket(false);
     }
   };
 
@@ -177,7 +188,7 @@ export function Chats() {
               {chat.ticket ? (
                 <Badge tone="accent" dot>Обращение №{chat.ticket}</Badge>
               ) : chat.requiresTicket ? (
-                <Button variant="secondary" size="sm" onClick={() => setTicketPrefill({ chatId: chat.id, fio, topic, essence })}>Создать обращение</Button>
+                <Button variant="secondary" size="sm" onClick={createTicketFromChat} disabled={creatingTicket}>{creatingTicket ? 'Создание…' : 'Создать обращение'}</Button>
               ) : (
                 <span style={{ font: 'var(--text-body-sm)', color: 'var(--text-tertiary)' }}>Не привязан к обращению</span>
               )}
@@ -210,13 +221,6 @@ export function Chats() {
           </div>
         )}
       </div>
-      <NewTicketDialog
-        open={!!ticketPrefill}
-        initial={ticketPrefill}
-        source={ticketPrefill ? { chatId: ticketPrefill.chatId } : undefined}
-        onClose={() => setTicketPrefill(null)}
-        onCreated={() => { setTicketPrefill(null); loadChats(); if (activeId) api.getChat(activeId).then(setChat); }}
-      />
     </div>
   );
 }
