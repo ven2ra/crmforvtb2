@@ -11,6 +11,15 @@ function formatDuration(ms) {
   return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
 }
 
+// SQLite's datetime('now') stores UTC as "YYYY-MM-DD HH:MM:SS" with no
+// timezone marker. Left as-is, `new Date(...)` in the browser parses it as
+// *local* time, which skews any live countdown by the viewer's UTC offset.
+// Marking it explicitly as UTC keeps the stopwatch correct everywhere.
+function toIsoUtc(ts) {
+  if (!ts) return ts;
+  return ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z';
+}
+
 function teamNames(callId) {
   return db.prepare(`
     SELECT e.name FROM call_team ct JOIN employees e ON e.id = ct.employee_id WHERE ct.call_id = ?
@@ -29,8 +38,8 @@ function callDetail(c) {
     malfunction: !!c.malfunction,
     requiresTicket: !!c.requires_ticket,
     status: c.status,
-    startedAt: c.started_at,
-    endedAt: c.ended_at,
+    startedAt: toIsoUtc(c.started_at),
+    endedAt: toIsoUtc(c.ended_at),
     agentId: c.agent_id,
     agentName: c.agent_name,
     isMine: c.agent_id === currentEmployeeId(),
